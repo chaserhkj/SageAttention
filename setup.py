@@ -179,7 +179,7 @@ fused_extension = CUDAExtension(
     sources=["csrc/fused/pybind.cpp", "csrc/fused/fused.cu"],
     extra_compile_args={
         "cxx": CXX_FLAGS,
-        "nvcc": NVCC_FLAGS,
+        "nvcc": make_nvcc_flags_for(*compute_capabilities),
     },
 )
 ext_modules.append(fused_extension)
