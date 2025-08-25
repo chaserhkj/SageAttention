@@ -17,6 +17,7 @@ limitations under the License.
 import os
 import subprocess
 import threading
+from copy import copy
 from packaging.version import parse, Version
 import warnings
 
@@ -95,30 +96,33 @@ if nvcc_cuda_version < Version("12.8") and any(cc.startswith("12.0") for cc in c
     raise RuntimeError(
         "CUDA 12.8 or higher is required for compute capability 12.0.")
 
-# Add target compute capabilities to NVCC flags.
-for capability in compute_capabilities:
-    if capability.startswith("8.0"):
-        HAS_SM80 = True
-        num = "80"
-    elif capability.startswith("8.6"):
-        HAS_SM86 = True
-        num = "86"
-    elif capability.startswith("8.9"):
-        HAS_SM89 = True
-        num = "89"
-    elif capability.startswith("9.0"):
-        HAS_SM90 = True
-        num = "90a" # need to use sm90a instead of sm90 to use wgmma ptx instruction.
-    elif capability.startswith("12.0"):
-        HAS_SM120 = True
-        num = "120" # need to use sm120a to use mxfp8/mxfp4/nvfp4 instructions.
-    NVCC_FLAGS += ["-gencode", f"arch=compute_{num},code=sm_{num}"]
-    if capability.endswith("+PTX"):
-        NVCC_FLAGS += ["-gencode", f"arch=compute_{num},code=compute_{num}"]
+def cap_to_num(cap):
+    if cap == "9.0":
+        return "90a" # need to use sm90a instead of sm90 to use wgmma ptx instruction.
+    else:
+        return cap.replace(".", "")
+
+def check_caps_requested(*target_caps):
+    return any(
+        any(requested_cap.startswith(target_cap) for requested_cap in compute_capabilities)
+        for target_cap in target_caps
+        )
+
+def make_nvcc_flags_for(*target_caps):
+    target_cap_set = set(target_caps)
+    flags = copy(NVCC_FLAGS)
+    sm_enabled_set = set(c.split("+")[0] for c in compute_capabilities)
+    for cap in target_cap_set.intersection(sm_enabled_set):
+        num = cap_to_num(cap)
+        flags += ["-gencode", f"arch=compute_{num},code=sm_{num}"]
+    compute_enabled_set = set(c.split("+")[0] for c in compute_capabilities if c.endswith("+PTX"))
+    for cap in target_cap_set.intersection(compute_enabled_set):
+        num = cap_to_num(cap)
+        flags += ["-gencode", f"arch=compute_{num},code=compute_{num}"]
 
 ext_modules = []
 
-if HAS_SM80 or HAS_SM86 or HAS_SM89 or HAS_SM90 or HAS_SM120:
+if check_caps_requested("8.0", "8.6", "8.9", "9.0", "12.0"):
     qattn_extension = CUDAExtension(
         name="sageattention._qattn_sm80",
         sources=[
@@ -127,12 +131,12 @@ if HAS_SM80 or HAS_SM86 or HAS_SM89 or HAS_SM90 or HAS_SM120:
         ],
         extra_compile_args={
             "cxx": CXX_FLAGS,
-            "nvcc": NVCC_FLAGS,
+            "nvcc": make_nvcc_flags_for("8.0", "8.6", "8.9", "9.0", "12.0"),
         },
     )
     ext_modules.append(qattn_extension)
 
-if HAS_SM89 or HAS_SM120:
+if check_caps_requested("8.9", "12.0"):
     qattn_extension = CUDAExtension(
         name="sageattention._qattn_sm89",
         sources=[
@@ -148,12 +152,12 @@ if HAS_SM89 or HAS_SM120:
         ],
         extra_compile_args={
             "cxx": CXX_FLAGS,
-            "nvcc": NVCC_FLAGS,
+            "nvcc": make_nvcc_flags_for("8.9", "12.0"),
         },
     )
     ext_modules.append(qattn_extension)
 
-if HAS_SM90:
+if check_caps_requested(9.0):
     qattn_extension = CUDAExtension(
         name="sageattention._qattn_sm90",
         sources=[
@@ -162,7 +166,7 @@ if HAS_SM90:
         ],
         extra_compile_args={
             "cxx": CXX_FLAGS,
-            "nvcc": NVCC_FLAGS,
+            "nvcc": make_nvcc_flags_for("9.0"),
         },
         extra_link_args=['-lcuda'],
     )
