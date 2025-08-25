@@ -158,7 +158,7 @@ if check_caps_requested("8.9", "12.0"):
     )
     ext_modules.append(qattn_extension)
 
-if check_caps_requested(9.0):
+if check_caps_requested("9.0"):
     qattn_extension = CUDAExtension(
         name="sageattention._qattn_sm90",
         sources=[
