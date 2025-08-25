@@ -120,6 +120,7 @@ def make_nvcc_flags_for(*target_caps):
     for cap in target_cap_set.intersection(compute_enabled_set):
         num = cap_to_num(cap)
         flags += ["-gencode", f"arch=compute_{num},code=compute_{num}"]
+    return flags
 
 ext_modules = []
 
